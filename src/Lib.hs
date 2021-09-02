@@ -4,25 +4,46 @@ module Lib (
 
 import Control.Monad ( forM_ )
 import System.Exit ( ExitCode )
-import System.FilePath ( pathSeparator, (</>), normalise )
-import System.Directory ( listDirectory, createDirectoryIfMissing)
+import System.FilePath ( pathSeparator, (</>), normalise, takeBaseName )
+import System.Directory ( doesDirectoryExist, listDirectory, createDirectoryIfMissing)
 import System.Process ( system )
+import System.IO (hFlush, stdout)
 
 label :: String
 label = normalise "score/label"
+
+data Option = Option
+    { baseName :: String
+    , styleShift :: Float
+    , pitchShift :: Float
+    , formantShift :: Float
+    , labelFull :: String
+    , labelMono :: String 
+    } deriving (Show, Eq)
 
 translate :: IO ()
 translate = do
     createDirectoryIfMissing True "wav"
     models <- modelYouUse
-    (song, songPath)   <- songToTranslate
-    let baseName = takeWhile (/='.') song
-        styleShift = 0
-        pitchShift = 1.0
-        formantShift = 1.0
-        labelFull = label </> "full" </> baseName ++ ".lab"
-        labelMono = label </> "mono" </> baseName ++ ".lab"
-    print models
+    songs <- songToTranslate
+    print songs
+    forM_ songs $ \(song, songPath) -> do
+        let baseName = takeBaseName songPath
+            option = Option
+                { baseName = baseName
+                , styleShift = 0
+                , pitchShift = 1.0
+                , formantShift = 1.0
+                , labelFull = label </> "full" </> baseName ++ ".lab"
+                , labelMono = label </> "mono" </> baseName ++ ".lab"
+                }
+        translate_ models option songPath
+
+translate_
+    models 
+    (Option baseName styleShift pitchShift formantShift labelFull labelMono)
+    songPath = do
+    putStrLn $ "songPath on translate: " ++ songPath
     forM_ models $ \model -> do
         let modelPath = "model" </> model ++ [pathSeparator]
         musicXMLtoLabel songPath labelFull labelMono
@@ -101,12 +122,18 @@ modelYouUse = do
         f a b = show a ++ ": " ++ b
         models = listDirectory "model"
 
-songToTranslate :: IO (String, String)
-songToTranslate = 
-    getThePath
+songToTranslate :: IO [(String, String)]
+songToTranslate = do
+    (name, path) <- getThePath
         "変換する曲を選んで数字を入力してください"
         musicxml
         songs
+    isDirectory <- doesDirectoryExist path
+    if isDirectory
+    then do
+        ps <- listDirectory path
+        return $ map (\x -> (takeBaseName x, musicxml </> name </> normalise x)) ps
+    else return [(name, path)]
     where
         songs = listDirectory musicxml
         musicxml = normalise "score/musicxml"
@@ -116,4 +143,5 @@ prompt message action = do
     putStrLn message
     action
     putStr "数字を半角で入力> "
+    hFlush stdout
     readLn
