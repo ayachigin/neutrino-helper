@@ -1,3 +1,3 @@
-# Changelog for neutrino-helper
+# neutrino-helperの変更履歴
 
-## Unreleased changes
+2021-09-02 初回バージョン作成
